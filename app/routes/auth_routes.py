@@ -11,7 +11,7 @@ auth_bp = Blueprint("auth_bp", __name__)
 def register():
     data = request.get_json()
     username = data.get("username")
-    mobile = data.get("mobile")
+    
 
     email = data.get("email")
     password = data.get("password")
@@ -19,7 +19,7 @@ def register():
     if User.query.filter_by(email=email).first():
         return jsonify({"error": "Email already exists"}), 400
 
-    user = User(username=username, email=email, mobile=mobile)
+    user = User(username=username, email=email)
     user.set_password(password)
     db.session.add(user)
     db.session.commit()
@@ -46,4 +46,4 @@ def login():
 def profile():
     user_id = get_jwt_identity()
     user = User.query.get(user_id)
-    return jsonify({"id": user.id, "username": user.username, "email": user.email, "mobile": user.mobile})
+    return jsonify({"id": user.id, "username": user.username, "email": user.email})
