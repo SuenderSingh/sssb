@@ -2,6 +2,7 @@ from flask import Flask
 from .extensions import db, jwt, CORS
 from .routes.auth_routes import auth_bp
 from .routes.main_routes import main_bp
+from .routes.goal_routes import goal_bp
 from config import DevelopmentConfig
 
 def create_app():
@@ -16,5 +17,6 @@ def create_app():
     # Register blueprints
     app.register_blueprint(main_bp)  # Register main routes without prefix
     app.register_blueprint(auth_bp, url_prefix="/auth")
+    app.register_blueprint(goal_bp, url_prefix="/api")  # Goals API routes
 
     return app
