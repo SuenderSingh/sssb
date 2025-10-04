@@ -3,11 +3,24 @@ from .extensions import db, jwt, CORS
 from .routes.auth_routes import auth_bp
 from .routes.main_routes import main_bp
 from .routes.goal_routes import goal_bp
-from config import DevelopmentConfig
+import os
 
-def create_app():
+def create_app(config_name=None):
     app = Flask(__name__)
-    app.config.from_object(DevelopmentConfig)
+    
+    # Determine configuration
+    if config_name is None:
+        config_name = os.environ.get('FLASK_ENV', 'development')
+    
+    if config_name == 'production':
+        from config import ProductionConfig
+        app.config.from_object(ProductionConfig)
+    elif config_name == 'staging':
+        from config import StagingConfig
+        app.config.from_object(StagingConfig)
+    else:
+        from config import DevelopmentConfig
+        app.config.from_object(DevelopmentConfig)
 
     # Initialize extensions
     db.init_app(app)
