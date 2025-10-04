@@ -100,6 +100,14 @@ def get_all_goals():
         category = request.args.get('category')
         is_completed = request.args.get('is_completed')
         
+        # Pagination parameters
+        page = int(request.args.get('page', 1))
+        per_page = int(request.args.get('per_page', 10))
+        
+        # Sorting parameters
+        sort_by = request.args.get('sort_by', 'created_at')  # created_at, start_date, end_date, priority
+        sort_order = request.args.get('sort_order', 'desc')  # asc or desc
+        
         # Build query
         query = Goal.query.filter_by(user_id=user_id)
         
@@ -107,19 +115,93 @@ def get_all_goals():
         if goal_type:
             query = query.filter_by(goal_type=goal_type)
         if priority:
-            query = query.filter_by(priority=priority)
+            query = query.filter_by(priority=priority.lower())
         if category:
             query = query.filter_by(category=category)
         if is_completed is not None:
             completed = is_completed.lower() == 'true'
             query = query.filter_by(is_completed=completed)
         
-        # Get goals ordered by creation date (newest first)
-        goals = query.order_by(Goal.created_at.desc()).all()
+        # Apply sorting
+        if sort_by == 'created_at':
+            sort_column = Goal.created_at
+        elif sort_by == 'start_date':
+            sort_column = Goal.start_date
+        elif sort_by == 'end_date':
+            sort_column = Goal.end_date
+        elif sort_by == 'priority':
+            # Custom priority ordering: high -> medium -> low
+            if sort_order == 'desc':
+                query = query.order_by(
+                    db.case(
+                        (Goal.priority == 'high', 1),
+                        (Goal.priority == 'medium', 2),
+                        (Goal.priority == 'low', 3)
+                    )
+                )
+            else:
+                query = query.order_by(
+                    db.case(
+                        (Goal.priority == 'low', 1),
+                        (Goal.priority == 'medium', 2),
+                        (Goal.priority == 'high', 3)
+                    )
+                )
+            sort_column = None
+        else:
+            sort_column = Goal.created_at  # Default fallback
+        
+        if sort_column is not None:
+            if sort_order == 'desc':
+                query = query.order_by(sort_column.desc())
+            else:
+                query = query.order_by(sort_column.asc())
+        
+        # Execute query with pagination
+        goals_pagination = query.paginate(
+            page=page, 
+            per_page=per_page, 
+            error_out=False
+        )
+        
+        goals = goals_pagination.items
+        
+        # Calculate additional statistics
+        total_goals = Goal.query.filter_by(user_id=user_id).count()
+        completed_goals = Goal.query.filter_by(user_id=user_id, is_completed=True).count()
+        pending_goals = Goal.query.filter_by(user_id=user_id, is_completed=False).count()
+        
+        # Get overdue goals count
+        from datetime import date
+        overdue_goals = Goal.query.filter_by(user_id=user_id, is_completed=False).filter(
+            Goal.end_date < date.today()
+        ).count()
         
         return jsonify({
             "goals": [goal.to_dict() for goal in goals],
-            "total": len(goals)
+            "pagination": {
+                "current_page": page,
+                "per_page": per_page,
+                "total_pages": goals_pagination.pages,
+                "total_items": goals_pagination.total,
+                "has_next": goals_pagination.has_next,
+                "has_prev": goals_pagination.has_prev
+            },
+            "statistics": {
+                "total_goals": total_goals,
+                "completed_goals": completed_goals,
+                "pending_goals": pending_goals,
+                "overdue_goals": overdue_goals,
+                "completion_rate": round((completed_goals / total_goals * 100), 2) if total_goals > 0 else 0
+            },
+            "filters_applied": {
+                "goal_type": goal_type,
+                "priority": priority,
+                "category": category,
+                "is_completed": is_completed,
+                "sort_by": sort_by,
+                "sort_order": sort_order
+            }
         }), 200
         
     except Exception as e:
